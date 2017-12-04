@@ -16,7 +16,10 @@ lazy val `url-shortener-impl` = (project in file("url-shortener-impl"))
     libraryDependencies ++= Seq(
       "com.softwaremill.macwire" %% "macros" % "2.2.5" % "provided",
       lagomScaladslPersistenceCassandra,
-      "com.lightbend" %% "lagom13-scala-service-locator-dns" % "2.2.2"
+      "com.lightbend" %% "lagom13-scala-service-locator-dns" % "2.2.2",
+      "org.scalatest" %% "scalatest" % "3.0.4" % Test,
+      "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0" % Test,
+      lagomScaladslTestKit
     )
   )
   .dependsOn(`url-shortener-api`)

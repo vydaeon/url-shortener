@@ -7,7 +7,7 @@ app.generateShortUrl = function() {
 	var fullUrl = $("#fullUrl").val();
 	$.ajax({
 		method : "POST",
-		url : app.server + "/url",
+		url : app.server + "/shortUrl",
 		data : fullUrl,
 		contentType : "text/plain",
 		success : function(shortUrlPath) {

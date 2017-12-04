@@ -2,104 +2,71 @@ package net.vydaeon.url.shortener.impl
 
 import scala.collection.immutable
 
-import com.lightbend.lagom.scaladsl.persistence.AggregateEvent
-import com.lightbend.lagom.scaladsl.persistence.AggregateEventTag
 import com.lightbend.lagom.scaladsl.persistence.PersistentEntity
 import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.ReplyType
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializer
+import com.lightbend.lagom.scaladsl.playjson.JsonSerializer.emptySingletonFormat
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
 
-import play.api.libs.json.Json
+import akka.Done
+import play.api.libs.json.Json.format
 
+/**
+ * Stores the full URL for a short URL fragment (the entity ID).
+ */
 class ShortenedUrl extends PersistentEntity {
 
   override type State = ShortenedUrlState
   override type Command = ShortenedUrlCommand
   override type Event = ShortenedUrlEvent
 
-  override def initialState = ShortenedUrlState.initial
+  override def initialState = ShortenedUrlState(None)
 
-  override def behavior = Actions()
-    .onCommand[SetFullUrl, Int] {
+  override def behavior: Behavior = {
+    case ShortenedUrlState(None)          => acceptFullUrl
+    case ShortenedUrlState(Some(fullUrl)) => provideFullUrl(fullUrl)
+  }
+
+  private def acceptFullUrl = Actions()
+    .onCommand[SetFullUrl, Done] {
       case (SetFullUrl(fullUrl), ctx, state) => setFullUrl(fullUrl, ctx, state)
     }
     .onEvent {
-      case (FullUrlSet(fullUrl), state) => setFullUrl(fullUrl, state)
-    }
-    .onReadOnlyCommand[GetFullUrl, String] {
-      case (GetFullUrl(index), ctx, state) => getFullUrl(index, ctx, state)
+      case (FullUrlSet(fullUrl), state) => fullUrlSet(fullUrl, state)
     }
 
-  private def setFullUrl(fullUrl: String, ctx: CommandContext[Int], state: ShortenedUrlState) = {
-    val existingIndex = state.fullUrls.indexOf(fullUrl)
-    if (existingIndex >= 0) {
-      ctx.reply(existingIndex)
-      ctx.done
-    } else {
-      val nextIndex = state.fullUrls.size
-      ctx.thenPersist(FullUrlSet(fullUrl)) { _ =>
-        ctx.reply(nextIndex)
-      }
+  private def setFullUrl(fullUrl: String, ctx: CommandContext[Done], state: State) =
+    ctx.thenPersist(FullUrlSet(fullUrl)) { _ =>
+      ctx.reply(Done)
     }
-  }
 
-  private def setFullUrl(fullUrl: String, state: ShortenedUrlState) =
-    ShortenedUrlState(state.fullUrls :+ fullUrl)
+  private def fullUrlSet(fullUrl: String, state: State) = ShortenedUrlState(Some(fullUrl))
 
-  private def getFullUrl(index: Int, ctx: ReadOnlyCommandContext[String], state: ShortenedUrlState) = {
-    val fullUrl = state.fullUrls(index)
-    ctx.reply(fullUrl)
-  }
+  private def provideFullUrl(fullUrl: String) = Actions()
+    .onReadOnlyCommand[GetFullUrl.type, String] {
+      case (_: GetFullUrl.type, ctx, _) => getFullUrl(ctx, fullUrl)
+    }
+
+  private def getFullUrl(ctx: ReadOnlyCommandContext[String], fullUrl: String) = ctx.reply(fullUrl)
 }
 
-final case class ShortenedUrlState(fullUrls: List[String])
-
-object ShortenedUrlState {
-
-  val initial = ShortenedUrlState(Nil)
-  implicit val format = Json.format[ShortenedUrlState]
-}
+final case class ShortenedUrlState(fullUrlOption: Option[String])
 
 sealed trait ShortenedUrlCommand
 
-final case class SetFullUrl(fullUrl: String)
-  extends ShortenedUrlCommand with ReplyType[Int]
+final case class SetFullUrl(fullUrl: String) extends ShortenedUrlCommand with ReplyType[Done]
 
-object SetFullUrl {
+final case object GetFullUrl extends ShortenedUrlCommand with ReplyType[String]
 
-  implicit val format = Json.format[SetFullUrl]
-}
-
-final case class GetFullUrl(index: Int)
-  extends ShortenedUrlCommand with ReplyType[String]
-
-object GetFullUrl {
-
-  implicit val format = Json.format[GetFullUrl]
-}
-
-object ShortenedUrlEvent {
-
-  val tag = AggregateEventTag[ShortenedUrlEvent]
-}
-
-sealed trait ShortenedUrlEvent extends AggregateEvent[ShortenedUrlEvent] {
-
-  override def aggregateTag = ShortenedUrlEvent.tag
-}
+sealed trait ShortenedUrlEvent
 
 final case class FullUrlSet(fullUrl: String) extends ShortenedUrlEvent
-
-object FullUrlSet {
-
-  implicit val format = Json.format[FullUrlSet]
-}
 
 object ShortenedUrlSerializerRegistry extends JsonSerializerRegistry {
 
   override def serializers: immutable.Seq[JsonSerializer[_]] = immutable.Seq(
-    JsonSerializer[ShortenedUrlState],
-    JsonSerializer[SetFullUrl],
-    JsonSerializer[GetFullUrl],
-    JsonSerializer[FullUrlSet])
+    JsonSerializer(format[ShortenedUrlState]),
+    JsonSerializer(format[SetFullUrl]),
+    JsonSerializer(emptySingletonFormat(GetFullUrl)),
+    JsonSerializer(format[FullUrlSet]))
 }

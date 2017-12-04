@@ -27,8 +27,13 @@ abstract class UrlShortenerApplication(context: LagomApplicationContext)
   with AhcWSComponents
   with CassandraPersistenceComponents {
 
+  lazy val entityService = wire[EntityService]
+
   override lazy val lagomServer = serverFor[UrlShortenerService](wire[UrlShortenerServiceImpl])
-  override lazy val jsonSerializerRegistry = ShortenedUrlSerializerRegistry
+  override lazy val jsonSerializerRegistry =
+    SequenceSerializerRegistry ++
+      ShortenedUrlSerializerRegistry
 
   persistentEntityRegistry.register(wire[ShortenedUrl])
+  persistentEntityRegistry.register(wire[ShortenedUrlIdSequence])
 }

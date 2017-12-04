@@ -1,6 +1,8 @@
 package net.vydaeon.url.shortener.api
 
 import com.lightbend.lagom.scaladsl.api.Service
+import com.lightbend.lagom.scaladsl.api.Service.named
+import com.lightbend.lagom.scaladsl.api.Service.pathCall
 import com.lightbend.lagom.scaladsl.api.ServiceCall
 import com.lightbend.lagom.scaladsl.api.transport.HeaderFilter
 import com.lightbend.lagom.scaladsl.api.transport.RequestHeader
@@ -10,21 +12,25 @@ import akka.NotUsed
 
 trait UrlShortenerService extends Service {
 
-  val pathPrefix = "/url"
-
+  /**
+   * @return a [[ServiceCall]] taking a plain-text request body with a full URL,
+   * and returning a plain-text response with a short URL path (for the current host).
+   */
   def createShortUrlPath: ServiceCall[String, String]
 
-  def redirectToLongUrl(shortUrlFragment: String, index: Int): ServiceCall[NotUsed, NotUsed]
+  /**
+   * @param shortUrlFragment The path fragment from a short URL.
+   * @return a [[ServiceCall]] taking no request body and returning no response body;
+   * the service call redirects to the full URL for the short URL.
+   */
+  def redirectToLongUrl(shortUrlFragment: String): ServiceCall[NotUsed, NotUsed]
 
-  override def descriptor = {
-    import com.lightbend.lagom.scaladsl.api.Service._
-    named("urlShortener")
-      .withCalls(
-        pathCall(pathPrefix, createShortUrlPath),
-        pathCall(pathPrefix + "/:fragment/:index", redirectToLongUrl _))
-      .withHeaderFilter(AccessControlAllowOriginFilter)
-      .withAutoAcl(true)
-  }
+  override def descriptor = named("urlShortener")
+    .withCalls(
+      pathCall("/shortUrl", createShortUrlPath),
+      pathCall("/:fragment", redirectToLongUrl _))
+    .withHeaderFilter(AccessControlAllowOriginFilter)
+    .withAutoAcl(true)
 }
 
 object AccessControlAllowOriginFilter extends HeaderFilter {
@@ -32,7 +38,7 @@ object AccessControlAllowOriginFilter extends HeaderFilter {
   override def transformServerResponse(response: ResponseHeader, request: RequestHeader) =
     response.addHeader("Access-Control-Allow-Origin", "*")
 
-  override def transformClientRequest(request: RequestHeader) = request
   override def transformServerRequest(request: RequestHeader) = request
+  override def transformClientRequest(request: RequestHeader) = request
   override def transformClientResponse(response: ResponseHeader, request: RequestHeader) = response
 }
